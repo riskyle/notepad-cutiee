@@ -145,20 +145,21 @@ export default function DashboardScreen() {
         </div>
 
         {/* Floating Action Bar (Sticky at bottom) */}
-        <div className="fixed bottom-8 w-full max-w-md px-5 left-1/2 -translate-x-1/2 z-50 flex justify-between gap-3 pointer-events-none">
-          <button className="flex-1 bg-white shadow-[0_8px_30px_rgba(0,0,0,0.12)] rounded-full py-4 px-6 flex items-center justify-center border border-black/5 pointer-events-auto">
-            <span className="font-fraunces font-black text-lg tracking-wide text-[#1A1A1A]">
+        <div className="fixed bottom-8 w-full max-w-md px-5 left-1/2 -translate-x-1/2 z-50 flex justify-between gap-2.5 pointer-events-none">
+
+          <button className="flex-1 bg-white shadow-[0_8px_30px_rgba(0,0,0,0.12)] rounded-full py-3.5 px-4 flex items-center justify-center border border-black/5 pointer-events-auto active:scale-95 transition-transform min-w-0">
+            <span className="font-fraunces font-black text-[15px] tracking-wide text-[#1A1A1A] truncate">
               <Link href="/templates">
                 Browse templates
               </Link>
             </span>
           </button>
 
-          <button className="bg-[#CC6B36] shadow-[0_8px_30px_rgba(204,107,54,0.3)] rounded-full py-4 px-8 flex items-center justify-center gap-1.5 transition-transform active:scale-95 pointer-events-auto">
-            <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+          <button className="bg-[#CC6B36] shadow-[0_8px_30px_rgba(204,107,54,0.3)] rounded-full py-3.5 px-6 flex items-center justify-center gap-1.5 transition-transform active:scale-95 pointer-events-auto shrink-0">
+            <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
             </svg>
-            <span className="font-bold text-white text-lg">
+            <span className="font-bold text-white text-[15px]">
               <Link href="/editor">
                 New
               </Link>
