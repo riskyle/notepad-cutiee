@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import Link from 'next/link';
 
 type Point = { x: number; y: number };
@@ -10,26 +10,36 @@ type Stroke = {
   points: Point[];
 };
 
+// 1. ADDED: A type to hold everything on a single page
+type PageData = {
+  title: string;
+  content: string;
+  strokes: Stroke[];
+};
+
 export default function EditorScreen() {
-  // --- DRAWING STATE ---
+  // --- DRAWING & MENU STATE ---
   const [activeTool, setActiveTool] = useState<'type' | 'pen' | 'marker' | 'eraser'>('type');
   const [activeColor, setActiveColor] = useState<string>('#1A1A1A');
-  const [strokes, setStrokes] = useState<Stroke[]>([]);
-  const currentStroke = useRef<Stroke | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const isDrawing = useRef(false);
-
-  // --- MENU & PREFERENCES STATE ---
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [format, setFormat] = useState<'notepad' | 'notebook'>('notepad');
   const [appearance, setAppearance] = useState('cream');
   const [pageStyle, setPageStyle] = useState('blank');
   const [activeFont, setActiveFont] = useState<'modern' | 'handwritten' | 'journal' | 'mono'>('modern');
 
-  // --- PAGINATION STATE (For Notebook Format) ---
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(2);
+  // --- REFS ---
+  const currentStroke = useRef<Stroke | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const isDrawing = useRef(false);
+
+  // --- UNIFIED PAGINATION STATE ---
+  const [currentPageIndex, setCurrentPageIndex] = useState(0);
+
+  // 2. UPDATED: Now stores text AND strokes for every page!
+  const [notebookPages, setNotebookPages] = useState<PageData[]>([
+    { title: '', content: '', strokes: [] }
+  ]);
 
   const colors = [
     { id: 'black', hex: '#1A1A1A' },
@@ -38,7 +48,7 @@ export default function EditorScreen() {
     { id: 'blue', hex: '#4A7694' },
   ];
 
-  // Helper Functions
+  // --- HELPERS ---
   const getFontClass = () => {
     switch (activeFont) {
       case 'mono': return 'font-mono text-sm';
@@ -76,23 +86,43 @@ export default function EditorScreen() {
     setActiveFont(fonts[nextIndex]);
   };
 
-  // --- CANVAS RESIZE LOGIC ---
-  const strokesRef = useRef<Stroke[]>([]);
-  useEffect(() => { strokesRef.current = strokes; }, [strokes]);
-
-  useEffect(() => {
+  // --- CANVAS SETUP & SIZING ---
+  useLayoutEffect(() => {
     const canvas = canvasRef.current;
-    const container = containerRef.current;
-    if (!canvas || !container) return;
-    const resizeCanvas = () => {
-      canvas.width = container.clientWidth;
-      canvas.height = container.clientHeight;
-      redrawCanvas(strokesRef.current);
-    };
-    window.addEventListener('resize', resizeCanvas);
-    resizeCanvas();
-    return () => window.removeEventListener('resize', resizeCanvas);
-  }, []);
+    if (canvas) {
+      canvas.width = canvas.offsetWidth;
+      canvas.height = canvas.offsetHeight;
+    }
+  }, [format]);
+
+  // --- PAGINATION & TEXT LOGIC ---
+  const goToNextPage = () => {
+    setCurrentPageIndex((prev) => Math.min(notebookPages.length - 1, prev + 1));
+  };
+
+  const goToPrevPage = () => {
+    setCurrentPageIndex((prev) => Math.max(0, prev - 1));
+  };
+
+  const addNewPage = () => {
+    setNotebookPages((prev) => [...prev, { title: '', content: '', strokes: [] }]);
+    setCurrentPageIndex(notebookPages.length);
+  };
+
+  // 3. ADDED: Helper to instantly save text to the current page
+  const updateText = (field: 'title' | 'content', value: string) => {
+    setNotebookPages((prev) => {
+      const newPages = [...prev];
+      newPages[currentPageIndex] = { ...newPages[currentPageIndex], [field]: value };
+      return newPages;
+    });
+  };
+
+  // --- REDRAW EFFECT ---
+  useEffect(() => {
+    const currentStrokes = notebookPages[currentPageIndex]?.strokes || [];
+    redrawCanvas(currentStrokes);
+  }, [notebookPages, currentPageIndex]);
 
   // --- DRAWING LOGIC ---
   const startDrawing = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -120,16 +150,21 @@ export default function EditorScreen() {
     isDrawing.current = false;
 
     if (currentStroke.current) {
-      // 1. Create a safe, physical copy of the stroke object immediately
       const finishedStroke = {
         ...currentStroke.current,
         points: [...currentStroke.current.points]
       };
 
-      // 2. Pass that safe copy to React (so it doesn't need to look at the ref anymore)
-      setStrokes((prev) => [...prev, finishedStroke]);
+      setNotebookPages((prevPages) => {
+        const newPages = [...prevPages];
+        const currentPage = newPages[currentPageIndex];
+        newPages[currentPageIndex] = {
+          ...currentPage,
+          strokes: [...currentPage.strokes, finishedStroke]
+        };
+        return newPages;
+      });
 
-      // 3. Now it is perfectly safe to clear out the ref for the next line!
       currentStroke.current = null;
     }
   };
@@ -138,14 +173,21 @@ export default function EditorScreen() {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
     if (!canvas || !ctx) return;
+
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+
     currentStrokes.forEach((stroke) => {
       if (!stroke || !stroke.points || stroke.points.length === 0) return;
       setupContext(ctx, stroke.tool, stroke.color);
       ctx.beginPath();
       ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
-      if (stroke.points.length === 1) ctx.lineTo(stroke.points[0].x + 0.1, stroke.points[0].y);
-      else for (let i = 1; i < stroke.points.length; i++) ctx.lineTo(stroke.points[i].x, stroke.points[i].y);
+      if (stroke.points.length === 1) {
+        ctx.lineTo(stroke.points[0].x + 0.1, stroke.points[0].y);
+      } else {
+        for (let i = 1; i < stroke.points.length; i++) {
+          ctx.lineTo(stroke.points[i].x, stroke.points[i].y);
+        }
+      }
       ctx.stroke();
     });
   };
@@ -166,12 +208,22 @@ export default function EditorScreen() {
   };
 
   const handleUndo = () => {
-    setStrokes((prev) => {
-      const remaining = prev.slice(0, -1);
-      redrawCanvas(remaining);
-      return remaining;
+    setNotebookPages((prevPages) => {
+      const newPages = [...prevPages];
+      const currentPage = newPages[currentPageIndex];
+
+      if (currentPage && currentPage.strokes.length > 0) {
+        newPages[currentPageIndex] = {
+          ...currentPage,
+          strokes: currentPage.strokes.slice(0, -1)
+        };
+      }
+      return newPages;
     });
   };
+
+  // Safe checks for rendering
+  const activePage = notebookPages[currentPageIndex] || { title: '', content: '', strokes: [] };
 
   return (
     <div className="min-h-screen bg-[#EFECE1] flex justify-center font-sans text-[#1A1A1A]">
@@ -179,7 +231,7 @@ export default function EditorScreen() {
 
         {/* Header Section */}
         <header className="flex items-center justify-between px-5 pt-12 pb-4 shrink-0">
-          <Link href="/dashboard" className="w-10 h-10 rounded-full bg-[#E4DFD2] flex items-center justify-center text-[#1A1A1A]">
+          <Link href="/" className="w-10 h-10 rounded-full bg-[#E4DFD2] flex items-center justify-center text-[#1A1A1A]">
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
           </Link>
           <div className="text-center">
@@ -193,11 +245,9 @@ export default function EditorScreen() {
         </header>
 
         {/* Note Canvas Container */}
-        {/* Dynamic bottom padding to account for the extra pagination row */}
         <div className={`flex-1 px-5 overflow-y-auto hide-scrollbar relative ${format === 'notebook' ? 'pb-[180px]' : 'pb-[130px]'}`}>
           <div className="relative min-h-full">
 
-            {/* STACKED PAPER EFFECT (Only visible if notebook format) */}
             {format === 'notebook' && (
               <>
                 <div className={`absolute inset-0 translate-x-1.5 translate-y-1.5 rounded-[1.25rem] border border-black/5 shadow-sm transition-colors duration-300 z-0 ${getAppearanceBg()}`} />
@@ -205,19 +255,23 @@ export default function EditorScreen() {
               </>
             )}
 
-            {/* Main Canvas Area */}
             <div
               ref={containerRef}
               className={`absolute inset-0 rounded-[1.25rem] shadow-sm p-6 flex flex-col transition-colors duration-300 z-10 ${getAppearanceBg()} ${getPagePattern()}`}
             >
+              {/* 4. UPDATED: Inputs are now connected to the current page state! */}
               <input
                 type="text"
                 placeholder="Untitled"
+                value={activePage.title}
+                onChange={(e) => updateText('title', e.target.value)}
                 className={`font-fraunces text-4xl font-black placeholder:text-[#7A868C] bg-transparent outline-none w-full mb-4 tracking-tight relative z-10 transition-colors duration-300 ${appearance === 'dark' ? 'text-[#FDFBF7]' : 'text-[#7A868C]'}`}
                 style={{ pointerEvents: activeTool === 'type' ? 'auto' : 'none' }}
               />
               <textarea
                 placeholder="Start writing..."
+                value={activePage.content}
+                onChange={(e) => updateText('content', e.target.value)}
                 className={`w-full flex-1 bg-transparent outline-none resize-none font-medium leading-relaxed placeholder:text-[#A39E93] relative z-10 transition-colors duration-300 ${getFontClass()} ${appearance === 'dark' ? 'text-[#EFECE1]' : 'text-[#8A857D]'}`}
                 style={{ pointerEvents: activeTool === 'type' ? 'auto' : 'none' }}
               />
@@ -227,7 +281,7 @@ export default function EditorScreen() {
                 onPointerMove={draw}
                 onPointerUp={stopDrawing}
                 onPointerOut={stopDrawing}
-                className="absolute inset-0 rounded-[1.25rem] touch-none z-20"
+                className="absolute inset-0 rounded-[1.25rem] touch-none z-20 w-full h-full"
                 style={{ pointerEvents: activeTool === 'type' ? 'none' : 'auto' }}
               />
             </div>
@@ -238,26 +292,30 @@ export default function EditorScreen() {
         {!isSettingsOpen && (
           <div className="absolute bottom-6 w-full max-w-md px-5 left-1/2 -translate-x-1/2 flex flex-col gap-3 z-30">
 
-            {/* PAGINATION ROW (Only visible if notebook format) */}
+            {/* PAGINATION ROW */}
             {format === 'notebook' && (
               <div className="flex items-center justify-between px-2 mb-1 w-full animate-fade-in">
                 <div className="flex items-center gap-4">
                   <button
-                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                    className="w-8 h-8 rounded-full bg-[#E6E1D3] flex items-center justify-center text-[#1A1A1A] transition-transform active:scale-95"
+                    onClick={goToPrevPage}
+                    disabled={currentPageIndex === 0}
+                    className="w-8 h-8 rounded-full bg-[#E6E1D3] flex items-center justify-center text-[#1A1A1A] transition-transform active:scale-95 disabled:opacity-50"
                   >
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
                   </button>
-                  <span className="text-sm font-medium text-[#5C5852]">Page {currentPage} of {totalPages}</span>
+                  <span className="text-sm font-medium text-[#5C5852]">
+                    Page {currentPageIndex + 1} of {notebookPages.length}
+                  </span>
                   <button
-                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                    className="w-8 h-8 rounded-full bg-[#E6E1D3] flex items-center justify-center text-[#1A1A1A] transition-transform active:scale-95"
+                    onClick={goToNextPage}
+                    disabled={currentPageIndex === notebookPages.length - 1}
+                    className="w-8 h-8 rounded-full bg-[#E6E1D3] flex items-center justify-center text-[#1A1A1A] transition-transform active:scale-95 disabled:opacity-50"
                   >
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
                   </button>
                 </div>
                 <button
-                  onClick={() => { setTotalPages(p => p + 1); setCurrentPage(totalPages + 1); }}
+                  onClick={addNewPage}
                   className="flex items-center gap-1 text-[#CC6B36] font-bold text-sm transition-transform active:scale-95 hover:text-[#BA5F2D]"
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
@@ -266,6 +324,7 @@ export default function EditorScreen() {
               </div>
             )}
 
+            {/* Drawing Tools */}
             <div className="flex gap-2 overflow-x-auto hide-scrollbar items-center w-full">
               <div className="flex items-center bg-[#E6E1D3] rounded-full p-1 shrink-0 shadow-sm">
                 {(['type', 'pen', 'marker', 'eraser'] as const).map((tool) => (
@@ -278,13 +337,14 @@ export default function EditorScreen() {
                 ))}
               </div>
               <div className="flex items-center bg-[#E6E1D3] rounded-full p-1 shrink-0 shadow-sm">
-                <button onClick={handleUndo} disabled={strokes.length === 0} className="text-[#8C877D] text-xs font-bold px-4 py-2 rounded-full disabled:opacity-40">Undo</button>
+                <button onClick={handleUndo} disabled={activePage.strokes.length === 0} className="text-[#8C877D] text-xs font-bold px-4 py-2 rounded-full disabled:opacity-40">Undo</button>
               </div>
             </div>
 
+            {/* Formatting Tools */}
             <div className="flex gap-2 w-full">
               <button onClick={() => setIsSettingsOpen(true)} className="flex-1 bg-white rounded-full py-3.5 flex items-center justify-center gap-2 shadow-sm transition-transform active:scale-95">
-                <span className="w-3.5 h-3.5 rounded-full bg-[#FDFBF7] border border-[#D5D0C4]" />
+                <span className={`w-3.5 h-3.5 rounded-full border border-[#D5D0C4] ${getAppearanceBg()}`} />
                 <span className="font-bold text-[#1A1A1A] text-sm capitalize">{appearance}</span>
               </button>
               <button onClick={() => setIsSettingsOpen(true)} className="flex-1 bg-white rounded-full py-3.5 flex items-center justify-center gap-2 shadow-sm transition-transform active:scale-95">
@@ -301,24 +361,20 @@ export default function EditorScreen() {
         {/* --- SETTINGS BOTTOM SHEET --- */}
         {isSettingsOpen && (
           <div className="absolute inset-0 z-50 flex flex-col justify-end">
-            {/* Dark Overlay (Click to close) */}
-            <div
-              className="absolute inset-0 bg-black/40 backdrop-blur-[1px] transition-opacity"
-              onClick={() => setIsSettingsOpen(false)}
-            />
+            <div className="absolute inset-0 bg-black/40 backdrop-blur-[1px] transition-opacity" onClick={() => setIsSettingsOpen(false)} />
 
-            {/* Sheet Content */}
             <div className="bg-[#FDFBF7] w-full rounded-t-[2rem] pt-3 pb-8 px-6 relative z-10 animate-slide-up shadow-2xl">
               <div className="w-12 h-1.5 bg-[#E4DFD2] rounded-full mx-auto mb-6" />
 
+              {/* Format Toggle */}
               <div className="mb-6">
                 <h3 className="text-[10px] font-bold tracking-wider text-[#8C877D] uppercase mb-3">Format</h3>
                 <div className="flex gap-2">
-                  <button onClick={() => setFormat('notepad')} className={`flex-1 p-3 rounded-2xl text-left border ${format === 'notepad' ? 'bg-[#1A1A1A] border-[#1A1A1A] text-white' : 'bg-white border-[#E4DFD2] text-[#1A1A1A]'}`}>
+                  <button onClick={() => setFormat('notepad')} className={`flex-1 p-3 rounded-2xl text-left border transition-colors ${format === 'notepad' ? 'bg-[#1A1A1A] border-[#1A1A1A] text-white' : 'bg-white border-[#E4DFD2] text-[#1A1A1A]'}`}>
                     <div className="font-bold text-sm mb-0.5">Notepad</div>
                     <div className={`text-xs ${format === 'notepad' ? 'text-gray-400' : 'text-[#8C877D]'}`}>One long page</div>
                   </button>
-                  <button onClick={() => setFormat('notebook')} className={`flex-1 p-3 rounded-2xl text-left border ${format === 'notebook' ? 'bg-[#1A1A1A] border-[#1A1A1A] text-white' : 'bg-transparent border-[#E4DFD2] text-[#1A1A1A]'}`}>
+                  <button onClick={() => setFormat('notebook')} className={`flex-1 p-3 rounded-2xl text-left border transition-colors ${format === 'notebook' ? 'bg-[#1A1A1A] border-[#1A1A1A] text-white' : 'bg-transparent border-[#E4DFD2] text-[#1A1A1A]'}`}>
                     <div className="font-bold text-sm mb-0.5">Notebook</div>
                     <div className={`text-xs ${format === 'notebook' ? 'text-gray-400' : 'text-[#8C877D]'}`}>Flip through sheets</div>
                   </button>
@@ -384,11 +440,7 @@ export default function EditorScreen() {
                 </div>
               </div>
 
-              {/* DONE BUTTON */}
-              <button
-                onClick={() => setIsSettingsOpen(false)}
-                className="w-full bg-[#E6E1D3] text-[#1A1A1A] font-bold text-base py-4 rounded-full active:scale-95 transition-transform"
-              >
+              <button onClick={() => setIsSettingsOpen(false)} className="w-full bg-[#E6E1D3] text-[#1A1A1A] font-bold text-base py-4 rounded-full active:scale-95 transition-transform mt-8">
                 Done
               </button>
             </div>
