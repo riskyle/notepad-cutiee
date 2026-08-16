@@ -1,3 +1,39 @@
+my-nextjs-app/
+├── 📁 public/                 # Static assets (images, fonts, icons) accessible at root
+├── 📁 src/                    # Main source code directory
+│   ├── 📁 app/                # App Router: file-system based routing & pages
+│   │   ├── 📁 (auth)          # Route group (doesn't affect URL) for grouping login/signup
+│   │   │   ├── login/
+│   │   │   │   └── page.tsx   # Renders at /login
+│   │   │   └── signup/
+│   │   │       └── page.tsx   # Renders at /signup
+│   │   ├── 📁 dashboard/      # Protected dashboard route segment
+│   │   │   ├── 📁 _components/# Private folder for components used *only* inside dashboard
+│   │   │   ├── error.tsx      # Error boundary for dashboard
+│   │   │   ├── loading.tsx    # Loading skeleton/UI for dashboard
+│   │   │   └── page.tsx       # Renders at /dashboard
+│   │   ├── favicon.ico        # App favicon
+│   │   ├── layout.tsx         # Root layout wrapping all pages
+│   │   └── page.tsx           # Homepage (renders at /)
+│   │
+│   ├── 📁 components/         # Reusable global UI components (buttons, modals, inputs)
+│   │   └── ui/
+│   │
+│   ├── 📁 hooks/              # Custom React hooks (e.g., useAuth, useDebounce)
+│   │
+│   ├── 📁 lib/                # Third-party library initializations & clients (e.g., supabase.ts)
+│   │
+│   ├── 📁 services/           # API integration or data fetching abstraction modules
+│   │
+│   ├── 📁 utils/              # Helper functions, formatters, and small utility scripts
+│   │
+│   └── 📁 types/              # TypeScript interfaces and global type definitions
+│
+├── .env.local                 # Local environment variables (Supabase keys, etc.)
+├── next.config.js             # Next.js configuration settings
+├── package.json               # Project dependencies and scripts
+└── tailwind.config.js         # Tailwind CSS configuration
+
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started
