@@ -6,7 +6,7 @@ const nextConfig: NextConfig = {
     return [
       {
         source: '/',
-        destination: '/login',
+        destination: '/',
         // Set to true if you never plan to have a landing page at '/'
         // Set to false if you might build a landing page later
         permanent: false,

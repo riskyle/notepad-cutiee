@@ -118,8 +118,18 @@ export default function EditorScreen() {
   const stopDrawing = () => {
     if (!isDrawing.current) return;
     isDrawing.current = false;
+
     if (currentStroke.current) {
-      setStrokes((prev) => [...prev, { ...currentStroke.current!, points: [...currentStroke.current!.points] }]);
+      // 1. Create a safe, physical copy of the stroke object immediately
+      const finishedStroke = {
+        ...currentStroke.current,
+        points: [...currentStroke.current.points]
+      };
+
+      // 2. Pass that safe copy to React (so it doesn't need to look at the ref anymore)
+      setStrokes((prev) => [...prev, finishedStroke]);
+
+      // 3. Now it is perfectly safe to clear out the ref for the next line!
       currentStroke.current = null;
     }
   };
