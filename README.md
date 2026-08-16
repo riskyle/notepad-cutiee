@@ -1,3 +1,4 @@
+```
 my-nextjs-app/
 ├── 📁 public/                 # Static assets (images, fonts, icons) accessible at root
 ├── 📁 src/                    # Main source code directory
@@ -33,6 +34,7 @@ my-nextjs-app/
 ├── next.config.js             # Next.js configuration settings
 ├── package.json               # Project dependencies and scripts
 └── tailwind.config.js         # Tailwind CSS configuration
+```
 
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
