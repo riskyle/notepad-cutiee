@@ -4,7 +4,7 @@ import Link from 'next/link';
 
 export default function DashboardScreen() {
   return (
-    <div className="h-screen overflow-hidden bg-[#EFECE1] flex justify-center font-sans text-[#1A1A1A]">
+    <div className="h-[100dvh] overflow-hidden bg-[#EFECE1] flex justify-center font-sans text-[#1A1A1A]">
       <main className="w-full max-w-md h-full overflow-y-auto relative pb-32">
         {/* --- STICKY HEADER & SEARCH --- */}
         <div className="sticky top-0 z-40 bg-[#EFECE1] px-5 pt-12 pb-6">
