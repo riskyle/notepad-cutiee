@@ -18,7 +18,9 @@ export default function DashboardScreen() {
               </h1>
             </div>
             <div className="w-10 h-10 rounded-full bg-[#A9C2A2] flex items-center justify-center font-bold text-sm text-[#1A1A1A] shadow-sm">
-              MK
+              <Link href='/settings'>
+                MK
+              </Link>
             </div>
           </header>
 
