@@ -1,5 +1,7 @@
 'use client';
 
+import Link from 'next/link';
+
 export default function DashboardScreen() {
   return (
     <div className="h-screen overflow-hidden bg-[#EFECE1] flex justify-center font-sans text-[#1A1A1A]">
@@ -144,7 +146,9 @@ export default function DashboardScreen() {
         <div className="fixed bottom-8 w-full max-w-md px-5 left-1/2 -translate-x-1/2 z-50 flex justify-between gap-3 pointer-events-none">
           <button className="flex-1 bg-white shadow-[0_8px_30px_rgba(0,0,0,0.12)] rounded-full py-4 px-6 flex items-center justify-center border border-black/5 pointer-events-auto">
             <span className="font-fraunces font-black text-lg tracking-wide text-[#1A1A1A]">
-              Browse templates
+              <Link href="/templates">
+                Browse templates
+              </Link>
             </span>
           </button>
 
@@ -153,7 +157,9 @@ export default function DashboardScreen() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
             </svg>
             <span className="font-bold text-white text-lg">
-              New
+              <Link href="/editor">
+                New
+              </Link>
             </span>
           </button>
         </div>
