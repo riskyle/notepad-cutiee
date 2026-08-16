@@ -1,13 +1,14 @@
 'use client';
 
+import { createBrowserClient } from '@supabase/ssr';
 import { createClient } from '@supabase/supabase-js';
 import { Fraunces } from 'next/font/google';
 import { useRouter } from 'next/navigation';
 
 // Initialize Supabase
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
-  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? ""
+const supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!
 );
 
 const fraunces = Fraunces({
@@ -18,19 +19,14 @@ const fraunces = Fraunces({
 export default function LoginScreen() {
   const router = useRouter();
   const signInWithGoogle = async () => {
-    router.push('/dashboard');
-    // const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
-    // const { error } = await supabase.auth.signInWithOAuth({
-    //   provider: 'google',
-    //   options: {
-    //     // Just point it straight to your Next.js local server!
-    //     redirectTo: `${baseUrl}/auth/callback`,
-    //   },
-    // });
 
-    // if (error) {
-    //   console.error('Error signing in:', error.message);
-    // }
+    await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        // This tells Google to send the user to our new route!
+        redirectTo: `${location.origin}/callback`,
+      },
+    });
   };
 
   // ... render method below
