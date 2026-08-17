@@ -22,7 +22,7 @@ type PageData = {
 // Initialize Supabase outside to prevent recreation
 const supabase = createBrowserClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!
 );
 
 // We wrap the main editor in a component to handle the useSearchParams safely
