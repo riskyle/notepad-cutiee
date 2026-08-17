@@ -1,9 +1,10 @@
 'use client';
 
 import { createBrowserClient } from '@supabase/ssr';
-import { createClient } from '@supabase/supabase-js';
 import { Fraunces } from 'next/font/google';
 import { useRouter } from 'next/navigation';
+import { useState } from 'react';
+import { toast } from 'sonner';
 
 // Initialize Supabase
 const supabase = createBrowserClient(
@@ -17,19 +18,35 @@ const fraunces = Fraunces({
 });
 
 export default function LoginScreen() {
-  const router = useRouter();
+  const [clickedDisabled, setClickedDisabled] = useState<boolean>(false)
   const signInWithGoogle = async () => {
+    setClickedDisabled(true);
 
-    await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        // This tells Google to send the user to our new route!
-        redirectTo: `${location.origin}/callback`,
-      },
+    toast.loading('Redirecting to Google...', {
+        id: 'google-login', // Using an ID prevents duplicate toasts if they click twice
     });
+
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          // This tells Google to send the user to our new route!
+          redirectTo: `${location.origin}/callback`,
+        },
+      });
+
+      if (error) throw error;
+    } catch (error: any) {
+      setClickedDisabled(true);
+      toast.error('Authentication failed', {
+        id: 'google-login',
+        description: error.message || 'Could not connect to Google. Please try again.',
+      });
+    } finally {
+      setClickedDisabled(true);
+    }
   };
 
-  // ... render method below
   return (
     <main className="min-h-screen bg-[#EFECE1] flex flex-col items-center justify-center p-6 md:p-12 relative overflow-hidden">
       {/*
@@ -68,6 +85,7 @@ export default function LoginScreen() {
         {/* Google Button */}
         <button
           onClick={signInWithGoogle}
+          disabled={clickedDisabled}
           className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-[#CC6B36] hover:bg-[#BA5F2D] transition-colors rounded-[2rem] shadow-sm mb-6"
         >
           {/* Custom White Google G Vector */}

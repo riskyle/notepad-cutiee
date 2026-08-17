@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createBrowserClient } from '@supabase/ssr';
+import { toast } from 'sonner';
 
 // Initialize Supabase outside the component
 const supabase = createBrowserClient(
@@ -33,11 +34,29 @@ export default function SettingsScreen() {
     fetchUser();
   }, []);
 
-  const handleSignOut = async () => {
+  const performSignOut = async () => {
+    toast.loading('Signing out...', { id: 'signout' });
+
     await supabase.auth.signOut();
+
+    toast.success('Signed out successfully', { id: 'signout' });
     router.refresh();
     router.push('/login');
   };
+
+  const handleSignOut = () => {
+  toast('Are you sure you want to sign out?', {
+    description: 'You will need to log back in to sync your notes.',
+    action: {
+      label: 'Sign out',
+      onClick: performSignOut,
+    },
+    cancel: {
+      label: 'Cancel',
+      onClick: () => {}, // Does nothing, just dismisses the toast
+    },
+  });
+};
 
   // Helper to extract initials if no Google Avatar exists
   const getInitials = (name?: string, email?: string) => {
