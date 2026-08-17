@@ -1,7 +1,9 @@
 'use client';
 
-import { useState, useRef, useEffect, useLayoutEffect } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect, Suspense } from 'react';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { createBrowserClient } from '@supabase/ssr';
 import { toast } from 'sonner';
 
 type Point = { x: number; y: number };
@@ -11,14 +13,28 @@ type Stroke = {
   points: Point[];
 };
 
-// 1. ADDED: A type to hold everything on a single page
 type PageData = {
   title: string;
   content: string;
   strokes: Stroke[];
 };
 
-export default function EditorScreen() {
+// Initialize Supabase outside to prevent recreation
+const supabase = createBrowserClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
+
+// We wrap the main editor in a component to handle the useSearchParams safely
+function EditorContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const urlId = searchParams.get('id');
+
+  // --- DB & AUTH STATE ---
+  const [noteId, setNoteId] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
+
   // --- DRAWING & MENU STATE ---
   const [activeTool, setActiveTool] = useState<'type' | 'pen' | 'marker' | 'eraser'>('type');
   const [activeColor, setActiveColor] = useState<string>('#1A1A1A');
@@ -34,13 +50,12 @@ export default function EditorScreen() {
   const containerRef = useRef<HTMLDivElement>(null);
   const isDrawing = useRef(false);
 
-  // --- UNIFIED PAGINATION STATE ---
+  // --- PAGINATION & DATA STATE ---
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
-
-  // 2. UPDATED: Now stores text AND strokes for every page!
   const [notebookPages, setNotebookPages] = useState<PageData[]>([
     { title: '', content: '', strokes: [] }
   ]);
+  const [saveStatus, setSaveStatus] = useState('Saved · all changes');
 
   const colors = [
     { id: 'black', hex: '#1A1A1A' },
@@ -48,6 +63,82 @@ export default function EditorScreen() {
     { id: 'green', hex: '#79936C' },
     { id: 'blue', hex: '#4A7694' },
   ];
+
+  // --- 1. INITIAL LOAD ---
+  useEffect(() => {
+    const fetchSessionAndData = async () => {
+      // Get the logged-in user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) setUserId(user.id);
+
+      // If opening an existing note from the dashboard
+      if (urlId) {
+        setNoteId(urlId);
+        const { data, error } = await supabase
+          .from('notes')
+          .select('pages, format, title')
+          .eq('id', urlId)
+          .single();
+
+        if (data && !error) {
+          if (data.pages) setNotebookPages(data.pages);
+          if (data.format) setFormat(data.format);
+        }
+      }
+    };
+
+    fetchSessionAndData();
+  }, [urlId]);
+
+
+  // --- 2. ACTUAL AUTO-SAVE ---
+  useEffect(() => {
+    if (!userId || saveStatus !== 'Saving...') return;
+
+    const saveTimeout = setTimeout(async () => {
+      // Fallback to 'Untitled' if the first page has no title
+      const currentTitle = notebookPages[0]?.title || 'Untitled';
+
+      const payload = {
+        user_id: userId,
+        title: currentTitle,
+        format: format,
+        pages: notebookPages,
+        updated_at: new Date().toISOString(),
+      };
+
+      if (noteId) {
+        // UPDATE EXISTING NOTE
+        const { error } = await supabase
+          .from('notes')
+          .update(payload)
+          .eq('id', noteId);
+
+        if (!error) setSaveStatus('Saved · all changes');
+        else setSaveStatus('Error saving');
+
+      } else {
+        // CREATE NEW NOTE
+        const { data, error } = await supabase
+          .from('notes')
+          .insert(payload)
+          .select()
+          .single();
+
+        if (data && !error) {
+          setNoteId(data.id);
+          setSaveStatus('Saved · all changes');
+          // Silently update the URL so future edits update this note instead of duplicating
+          window.history.replaceState(null, '', `/editor?id=${data.id}`);
+        } else {
+          setSaveStatus('Error saving');
+        }
+      }
+    }, 1500);
+
+    return () => clearTimeout(saveTimeout);
+  }, [notebookPages, format, saveStatus, noteId, userId]);
+
 
   // --- HELPERS ---
   const getFontClass = () => {
@@ -87,7 +178,6 @@ export default function EditorScreen() {
     setActiveFont(fonts[nextIndex]);
   };
 
-  // --- CANVAS SETUP & SIZING ---
   useLayoutEffect(() => {
     const canvas = canvasRef.current;
     if (canvas) {
@@ -97,27 +187,22 @@ export default function EditorScreen() {
   }, [format]);
 
   // --- PAGINATION & TEXT LOGIC ---
-  const goToNextPage = () => {
-    setCurrentPageIndex((prev) => Math.min(notebookPages.length - 1, prev + 1));
-  };
-
-  const goToPrevPage = () => {
-    setCurrentPageIndex((prev) => Math.max(0, prev - 1));
-  };
+  const goToNextPage = () => setCurrentPageIndex((prev) => Math.min(notebookPages.length - 1, prev + 1));
+  const goToPrevPage = () => setCurrentPageIndex((prev) => Math.max(0, prev - 1));
 
   const addNewPage = () => {
     setNotebookPages((prev) => [...prev, { title: '', content: '', strokes: [] }]);
     setCurrentPageIndex(notebookPages.length);
+    setSaveStatus('Saving...');
 
-    // Add satisfying feedback
     toast.success('New page added', {
       description: `Switched to page ${notebookPages.length + 1}`,
-      duration: 2000, // Disappears quickly
+      duration: 2000,
     });
   };
 
-  // 3. ADDED: Helper to instantly save text to the current page
   const updateText = (field: 'title' | 'content', value: string) => {
+    setSaveStatus('Saving...'); // Triggers auto-save!
     setNotebookPages((prev) => {
       const newPages = [...prev];
       newPages[currentPageIndex] = { ...newPages[currentPageIndex], [field]: value };
@@ -125,7 +210,6 @@ export default function EditorScreen() {
     });
   };
 
-  // --- REDRAW EFFECT ---
   useEffect(() => {
     const currentStrokes = notebookPages[currentPageIndex]?.strokes || [];
     redrawCanvas(currentStrokes);
@@ -157,6 +241,7 @@ export default function EditorScreen() {
     isDrawing.current = false;
 
     if (currentStroke.current) {
+      setSaveStatus('Saving...'); // Triggers auto-save!
       const finishedStroke = {
         ...currentStroke.current,
         points: [...currentStroke.current.points]
@@ -215,6 +300,7 @@ export default function EditorScreen() {
   };
 
   const handleUndo = () => {
+    setSaveStatus('Saving...'); // Triggers auto-save!
     setNotebookPages((prevPages) => {
       const newPages = [...prevPages];
       const currentPage = newPages[currentPageIndex];
@@ -229,24 +315,11 @@ export default function EditorScreen() {
     });
   };
 
-  const [saveStatus, setSaveStatus] = useState('Saved · all changes');
+  const handleFormatChange = (newFormat: 'notepad' | 'notebook') => {
+    setFormat(newFormat);
+    setSaveStatus('Saving...'); // Format changes should save too
+  };
 
-  // --- SIMULATED AUTO-SAVE ---
-  useEffect(() => {
-    // 1. Instantly show saving when a change happens
-    setSaveStatus('Saving...');
-
-    // 2. Wait 1.5 seconds after the user stops typing/drawing
-    const saveTimeout = setTimeout(() => {
-      // In the future, this is exactly where we will put the Supabase update function!
-      setSaveStatus('Saved · all changes');
-    }, 1500);
-
-    // 3. Cleanup: If the user types again before 1.5s is up, cancel the timer and start over
-    return () => clearTimeout(saveTimeout);
-  }, [notebookPages]); // This runs every time the notebook updates
-
-  // Safe checks for rendering
   const activePage = notebookPages[currentPageIndex] || { title: '', content: '', strokes: [] };
 
   return (
@@ -287,7 +360,6 @@ export default function EditorScreen() {
               ref={containerRef}
               className={`absolute inset-0 rounded-[1.25rem] shadow-sm p-6 flex flex-col transition-colors duration-300 z-10 ${getAppearanceBg()} ${getPagePattern()}`}
             >
-              {/* 4. UPDATED: Inputs are now connected to the current page state! */}
               <input
                 type="text"
                 placeholder="Untitled"
@@ -398,13 +470,13 @@ export default function EditorScreen() {
               <div className="mb-6">
                 <h3 className="text-[10px] font-bold tracking-wider text-[#8C877D] uppercase mb-3">Format</h3>
                 <div className="flex gap-2">
-                  <button onClick={() => setFormat('notepad')} className={`flex-1 p-3 rounded-2xl text-left border transition-colors ${format === 'notepad' ? 'bg-[#1A1A1A] border-[#1A1A1A] text-white' : 'bg-white border-[#E4DFD2] text-[#1A1A1A]'}`}>
+                  <button onClick={() => handleFormatChange('notepad')} className={`flex-1 p-3 rounded-2xl text-left border transition-colors ${format === 'notepad' ? 'bg-[#1A1A1A] border-[#1A1A1A] text-white' : 'bg-white border-[#E4DFD2] text-[#1A1A1A]'}`}>
                     <div className="font-bold text-sm mb-0.5">Notepad</div>
                     <div className={`text-xs ${format === 'notepad' ? 'text-gray-400' : 'text-[#8C877D]'}`}>One long page</div>
                   </button>
-                  <button onClick={() => setFormat('notebook')} className={`flex-1 p-3 rounded-2xl text-left border transition-colors ${format === 'notebook' ? 'bg-[#1A1A1A] border-[#1A1A1A] text-white' : 'bg-transparent border-[#E4DFD2] text-[#1A1A1A]'}`}>
+                  <button onClick={() => handleFormatChange('notebook')} className={`flex-1 p-3 rounded-2xl text-left border transition-colors ${format === 'notebook' ? 'bg-[#1A1A1A] border-[#1A1A1A] text-white' : 'bg-transparent border-[#E4DFD2] text-[#1A1A1A]'}`}>
                     <div className="font-bold text-sm mb-0.5">Notebook</div>
-                    <div className={`text-xs ${format === 'notebook' ? 'text-gray-400' : 'text-[#8C877D]'}`}>Flip through sheets</div>
+                    <div className={`text-xs ${format === 'notebook' ? 'text-notebook' : 'text-[#8C877D]'}`}>Flip through sheets</div>
                   </button>
                 </div>
               </div>
@@ -476,5 +548,14 @@ export default function EditorScreen() {
         )}
       </main>
     </div>
+  );
+}
+
+// Ensure the page safely handles useSearchParams with Suspense
+export default function EditorScreen() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#EFECE1]" />}>
+      <EditorContent />
+    </Suspense>
   );
 }
